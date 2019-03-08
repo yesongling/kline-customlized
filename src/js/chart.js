@@ -107,16 +107,6 @@ export class Chart {
                 // since : null
             });
             Control.requestData(true);
-        } else {
-            Kline.instance.requestParam = Control.setHttpRequestParam({
-                symbol: Kline.instance.symbol,
-                range : Kline.instance.polymerization,
-                limit : Kline.instance.limit,
-                // limit : null,
-                // since : f.toString()
-                since : new Date()-(Kline.instance.polymerization*(Kline.instance.limit-1))
-            });
-            Control.requestData();
         }
         ChartManager.instance.redraw('All', false);
     }

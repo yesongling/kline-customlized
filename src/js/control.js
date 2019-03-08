@@ -51,7 +51,7 @@ export class Control {
         } else {
             $("#chart_updated_time_text").html(Control.refreshCounter + "秒");
         }
-        Control.refreshHandler = setInterval(Control.refreshFunction, Kline.instance.intervalTime);
+        window.klineInstanceInterval = Control.refreshHandler = setInterval(Control.refreshFunction, Kline.instance.intervalTime);
     }
 
     static requestData(showLoading) {
@@ -61,7 +61,7 @@ export class Control {
             return;
         }
         if (showLoading === true) {
-            $("#chart_loading").addClass("activated");
+            // $("#chart_loading").addClass("activated");
         }
         if (Kline.instance.type === "stomp" && Kline.instance.stompClient) {
             Control.requestOverStomp();
@@ -75,7 +75,7 @@ export class Control {
     }
 
     static requestOverStomp() {
-        if (!Kline.instance.socketConnected) {
+        /*if (!Kline.instance.socketConnected) {
             if (Kline.instance.debug) {
                 console.log("DEBUG: socket is not coonnected")
             }
@@ -90,7 +90,49 @@ export class Control {
         }
         Kline.instance.timer = setTimeout(function () {
             Control.requestData(true);
-        }, 1000);
+        }, 1000);*/
+
+      if (Kline.instance.debug) {
+        console.log("DEBUG: " + Kline.instance.requestParam);
+      }
+      $(document).ready(
+        Kline.instance.G_HTTP_REQUEST = $.ajax({
+          type: "GET",
+          url: Kline.instance.url,
+          dataType: 'json',
+          data: Kline.instance.requestParam,
+          timeout: 30000,
+          created: Date.now(),
+          beforeSend: function () {
+            this.range  = Kline.instance.range;
+            this.symbol = Kline.instance.symbol;
+          },
+          success: function (res) {
+            let lines = eval(res.data);
+            res.data  = {};
+            res.data.lines  = lines;
+            res.data.depths = null;
+            res.data.trades = [];
+            if (Kline.instance.G_HTTP_REQUEST) {
+              Control.requestSuccessHandler(res);
+            }
+          },
+          error: function (xhr, textStatus, errorThrown) {
+            if (Kline.instance.debug) {
+              console.log(xhr);
+            }
+            if (xhr.status === 200 && xhr.readyState === 4) {
+              return;
+            }
+            Kline.instance.timer = setTimeout(function () {
+              Control.requestData(true);
+            }, Kline.instance.intervalTime);
+          },
+          complete: function () {
+            Kline.instance.G_HTTP_REQUEST = null;
+          }
+        })
+      );
     }
 
     static requestOverHttp() {
@@ -156,6 +198,11 @@ export class Control {
 
         let chart = ChartManager.instance.getChart();
         chart.setTitle();
+        if (res.data instanceof Array){
+          res.data.sort(function(prev,next){
+            return prev[0] - next[0]
+          });
+        }
         Kline.instance.data = eval(res.data);
 
         let updateDataRes = Kline.instance.chartMgr.updateData("frame0.k0", Kline.instance.data.lines);
@@ -167,7 +214,7 @@ export class Control {
             since : Kline.instance.chartMgr.getDataSource("frame0.k0").getLastDate()
         });
 
-        let intervalTime = Kline.instance.intervalTime < Kline.instance.range ? Kline.instance.intervalTime : Kline.instance.range;
+        let intervalTime = Kline.instance.intervalTime <= Kline.instance.range ? Kline.instance.intervalTime : Kline.instance.range;
 
         if (!updateDataRes) {
             if (Kline.instance.type === 'poll') {
@@ -175,17 +222,17 @@ export class Control {
             }
             return;
         }
-        if (Kline.instance.data.trades && Kline.instance.data.trades.length > 0) {
-            KlineTrade.instance.pushTrades(Kline.instance.data.trades);
-            KlineTrade.instance.klineTradeInit = true;
-        }
-        if (Kline.instance.data.depths) {
-            KlineTrade.instance.updateDepth(Kline.instance.data.depths);
-        }
+        // if (Kline.instance.data.trades && Kline.instance.data.trades.length > 0) {
+        //     KlineTrade.instance.pushTrades(Kline.instance.data.trades);
+        //     KlineTrade.instance.klineTradeInit = true;
+        // }
+        // if (Kline.instance.data.depths) {
+        //     KlineTrade.instance.updateDepth(Kline.instance.data.depths);
+        // }
         Control.clearRefreshCounter();
 
         if (Kline.instance.type === 'poll') {
-            Kline.instance.timer = setTimeout(Control.TwoSecondThread, intervalTime);
+            Kline.instance.timer = setTimeout(Control.TwoSecondThread, 5*60000);
         }
 
         ChartManager.instance.redraw('All', false);
@@ -265,23 +312,29 @@ export class Control {
         Control.chartSwitchLanguage(tmp.language || "zh-cn");
     }
 
-    /*static setHttpRequestParam(symbol, range, limit, since) {     // custom
-        let str = "symbol=" + symbol + "&range=" + range;
-        if (limit !== null)
-            str += "&limit=" + limit;
-        else
-            str += "&since=" + since;
-        if (KlineTrade.instance.tradeDate.getTime() !== 0) {
-            str += "&prevTradeTime=" + KlineTrade.instance.tradeDate.getTime();
-        }
-        return str;
-    }*/
+    // static setHttpRequestParam2(symbol, range, limit, since) {     // custom
+    //     let str = "pair=" + symbol + "&type=" + range;
+    //     if (limit !== null)
+    //         str += "&limit=" + limit;
+    //     else
+    //         str += "&since=" + since;
+    //     if (KlineTrade.instance.tradeDate.getTime() !== 0) {
+    //         str += "&prevTradeTime=" + KlineTrade.instance.tradeDate.getTime();
+    //     }
+    //
+    //     if (limit !== null) {
+    //         str += "&limit=" + limit;
+    //     }
+    //
+    //     return str;
+    // }
 
     static setHttpRequestParam(params) {
         // let str = "symbol=" + symbol + "&range=" + range;
         let str;
 
         let types = parseInt(params.range) / (60 * 1000);
+        let end = parseInt(params.since) + (60 * 1000)*types*parseInt(params.limit);
         // if (limit !== null)
         //     str += "&limit=" + limit;
         // else
@@ -317,9 +370,9 @@ export class Control {
         try {
             if (KlineTrade.instance.tradeDate.getTime() !== 0) {
                 // str += "&prevTradeTime=" + KlineTrade.instance.tradeDate.getTime();
-                str = "code=" + params.symbol + "&start=" + params.since + "&limit=" + params.limit + "&type=" + types;   //  coin_pair + start_time + count + range
+                str = "code=" + params.symbol + "&start=" + params.since + "&limit=" + params.limit + "&type=" + types + "&end=" + end;   //  coin_pair + start_time + count + range + end
             } else {
-                str = "code=" + params.symbol + "&start=" + params.since + "&limit=" + params.limit + "&type=" + types;   //  coin_pair + start_time + count + range
+                str = "code=" + params.symbol + "&start=" + params.since + "&limit=" + params.limit + "&type=" + types + "&end=" + end;   //  coin_pair + start_time + count + range + end
             }
         } catch (e) {
             console.log(Object.prototype.toString.call(params.range)+'Kline Parameter Error')
@@ -665,6 +718,11 @@ export class Control {
             Kline.instance.subscribed.unsubscribe();
             Kline.instance.subscribed = Kline.instance.stompClient.subscribe(Kline.instance.subscribePath + '/' + symbol + '/' + Kline.instance.range, Control.subscribeCallback);
         }
+
+        /* bitcola */
+        Control.requestData()
+        /* bitcola */
+
         Control.switchSymbolSelected(symbol);
         let settings = ChartSettings.get();
         if (settings.charts.period === "line") {

@@ -65,6 +65,7 @@ export class ChartManager {
         this._overlayCanvas = null;
         this._mainContext = null;
         this._overlayContext = null;
+        this.forceRequest = undefined;
 
         if (!ChartManager.created) {
             ChartManager.instance = this;
@@ -332,6 +333,9 @@ export class ChartManager {
         let cached = this.getCachedDataSource(dsAlias);
         if (cached !== undefined && cached !== null) {
             this.setDataSource(dsName, cached, true);
+            /* bitcola */
+            this.setCachedDataSource(dsAlias, new data_sources.MainDataSource(dsAlias));
+            /* bitcola */
         } else {
             cached = new data_sources.MainDataSource(dsAlias);
             this.setDataSource(dsName, cached, true);
@@ -536,6 +540,45 @@ export class ChartManager {
                     this.drawAreaOverlay(context, area);
                 }
         }
+    }
+
+    manualUpdateData(dsName, data) {
+        let ds = this.getDataSource(dsName);
+        if (ds === undefined || ds === null) {
+            return;
+        }
+        if (data !== undefined && data !== null) {
+            if (!ds.update(data)) {
+                return false;
+            }
+        }
+        ds.setUpdateMode(data_sources.DataSource.UpdateMode.Refresh);
+        let timeline = this.getTimeline(dsName);
+        if (timeline !== undefined && timeline !== null) {
+            timeline.update();
+        }
+        if (ds.getDataCount() < 1) {
+          return true;
+        }
+        let dpNames = [".main", ".secondary"];
+        let area, areaName;
+        for (let n in this._areas) {
+            area = this._areas[n];
+            if (Util.isInstance(area, areas.ChartAreaGroup)) {
+                continue;
+            }
+            if (area.getDataSourceName() !== dsName) {
+                continue;
+            }
+            areaName = area.getName();
+            for (let i = 0; i < dpNames.length; i++) {
+                let dp = this.getDataProvider(areaName + dpNames[i]);
+                if (dp !== undefined && dp !== null) {
+                    dp.updateData();
+                }
+            }
+        }
+        return true;
     }
 
     updateData(dsName, data) {

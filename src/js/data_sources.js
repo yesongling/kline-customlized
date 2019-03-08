@@ -98,7 +98,9 @@ export class MainDataSource extends DataSource {
         this._appendedCount = 0;
         this._erasedCount = 0;
         let len = this._dataItems.length;
-        if (len > 0) {
+
+        /* bitcola */
+        if (len > 0 && !(data.length>len && len<Kline.instance.limit)) {
             let lastIndex = len - 1;
             let lastItem = this._dataItems[lastIndex];
             let e, i, cnt = data.length;
@@ -124,7 +126,7 @@ export class MainDataSource extends DataSource {
                         this._updatedCount++;
                     }
                     i++;
-                    if (i < cnt) {
+                    if (i < cnt) /** update multiple datas timestamp is just after lastItem */{
                         this.setUpdateMode(DataSource.UpdateMode.Append);
                         for (; i < cnt; i++, this._appendedCount++) {
                             e = data[i];
@@ -136,9 +138,25 @@ export class MainDataSource extends DataSource {
                                 close: e[4],
                                 volume: e[5]
                             });
+
                         }
                     }
                     return true;
+                } else if(cnt === 1 && e[0] > lastItem.date && e[0]%Kline.instance.range===0) /** update data that time
+                 stamp
+                 large than
+                 lastItem -
+                 socket data */ {
+                    this.setUpdateMode(DataSource.UpdateMode.Update);
+                    this._dataItems[lastIndex+1] = {
+                        date: e[0],
+                        open: e[1],
+                        high: e[2],
+                        low: e[3],
+                        close: e[4],
+                        volume: e[5]
+                    };
+                    this._updatedCount++;
                 }
             }
             if (cnt < Kline.instance.limit) {
@@ -153,7 +171,7 @@ export class MainDataSource extends DataSource {
             e = data[i];
             for (n = 1; n <= 4; n++) {
                 // d = this.calcDecimalDigits(e[n]);  modified: some data is not float
-                d = this.calcDecimalDigits(e[n].toFixed(2));
+                d = this.calcDecimalDigits(e[n]);
                 if (this._decimalDigits < d)
                     this._decimalDigits = d;
             }
