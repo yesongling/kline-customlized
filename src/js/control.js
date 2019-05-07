@@ -58,6 +58,7 @@ export class Control {
         Control.AbortRequest();
         window.clearTimeout(Kline.instance.timer);
         if (Kline.instance.paused) {
+            Kline.instance.debug&&console.log('pause return');
             return;
         }
         if (showLoading === true) {
